@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "custom-rag"
+version = "0.1.0"
+description = ""
+authors = ["Agustin Sanchez <asmerlinsky@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+langchain = "^0.2.15"
+openai = "^1.43.0"
+langchain-chroma = "^0.1.3"
+langchain-experimental = "^0.0.64"
+langchain-openai = "^0.1.23"
+sentence-transformers = "^3.0.1"
+xformers = "^0.0.27.post2"
+pypdf = "^4.3.1"
+langchain-huggingface = "^0.0.3"
+unstructured = {extras = ["all-docs"], version = "^0.15.9"}
+langchain-ollama = "^0.1.3"
+
+
+[tool.poetry.group.dev.dependencies]
+jupyterlab = "^4.2.5"
+isort = "^5.13.2"
+black = "^24.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
