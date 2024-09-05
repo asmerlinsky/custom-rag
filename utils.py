@@ -1,23 +1,30 @@
 """ Utils and helper functinons"""
 
+import glob
 import os
+import re
 import shutil
 
+from dateutil.parser import parse
 from langchain.schema.document import Document
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_community.llms.ollama import Ollama
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import (Runnable, RunnableParallel,
+                                      RunnablePassthrough, RunnablePick)
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 CHROMA_PATH = "chroma"
+from datetime import datetime, timedelta
+
+import numpy as np
 
 
 def get_embedding_function():
-    """ Gets a relatively small and well performing embedding model"""
+    """Gets a relatively small and well performing embedding model"""
     embeddings = HuggingFaceEmbeddings(
         model_name="dunzhang/stella_en_400M_v5",
         model_kwargs={"trust_remote_code": True},
@@ -26,7 +33,7 @@ def get_embedding_function():
 
 
 def get_db():
-    """ Retrieves the vector db"""
+    """Retrieves the vector db"""
     db = Chroma(
         persist_directory=CHROMA_PATH,
         embedding_function=get_embedding_function(),
@@ -35,7 +42,7 @@ def get_db():
 
 
 def get_retriever_db():
-    return get_db().as_retriever()
+    return get_db().as_retriever(search_kwargs={"k": 40})
 
 
 def load_files(data_path):
@@ -48,6 +55,51 @@ def load_files(data_path):
     """
     document_loader = PyPDFDirectoryLoader(data_path)
     return document_loader.load()
+
+
+def load_txt_files(data_path):
+
+    file_list = glob.glob(data_path + "*.txt")
+
+    corpus = []
+
+    for file_path in file_list:
+        with open(file_path) as f_input:
+            corpus.append(
+                {"source": os.path.basename(file_path), "content": f_input.read()}
+            )
+    return corpus
+
+
+def split_conversations(conversations):
+    pattern = r"\n\d+/\d+/\d+, \d+:\d+ - "
+    grouped_conversations = []
+    for conv in conversations:
+        content_date = list(
+            map(
+                lambda s: datetime.strptime(s[1:-3], "%m/%d/%y, %H:%M"),
+                re.findall(pattern, conv["content"]),
+            )
+        )
+        content = re.split(pattern, conv["content"])
+
+        time_delta = np.diff(content_date)
+        conv_idxs = [0] + list(np.where(time_delta > timedelta(hours=6))[0]) + [None]
+
+        grouped_conversations.extend(
+            [
+                Document(
+                    page_content="\n".join(content[conv_idxs[i] : conv_idxs[i + 1]]),
+                    metadata={
+                        "source": conv["source"],
+                        "page": content_date[conv_idxs[i]].isoformat(),
+                    },
+                )
+                for i in range(len(conv_idxs) - 1)
+            ]
+        )
+
+    return grouped_conversations
 
 
 def split_document(documents: list[Document]):
@@ -129,24 +181,26 @@ def clear_database():
         shutil.rmtree(CHROMA_PATH)
 
 
-def query_rag(query: str):
-    """ Builds the chain and runs the question through the rag model"""
+def query_rag(query: str, prompt_template: str):
+    """Builds the chain and runs the question through the rag model"""
     retriever = get_retriever_db()
-
-    prompt_template = """Answer the question based only on the following context:
-    {context}
-    Question: {question}
-    """
 
     prompt = ChatPromptTemplate.from_template(prompt_template)
 
     model = Ollama(model="phi3")
 
-    chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
+    join_docs = lambda x: "\n".join([doc.page_content for doc in x.get("retriever")])
+    get_ids = lambda x: [doc.metadata["id"] for doc in x.get("retriever")]
+
+    rag_chain = (
+        {"context": join_docs, "question": RunnablePick("question")}
         | prompt
         | model
         | StrOutputParser()
     )
+    chain = {
+        "retriever": retriever,
+        "question": RunnablePassthrough(),
+    } | RunnableParallel({"chunk_ids": get_ids, "output": rag_chain})
 
-    return chain.invoke(query)
+    return chain.invoke(query).values()

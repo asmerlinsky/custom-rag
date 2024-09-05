@@ -1,8 +1,16 @@
 """ Commands for rag cli"""
 
 import click
+from transformers.utils import logging
 
-from utils import add_to_chroma, clear_database, load_files, query_rag, split_document
+from utils import (add_to_chroma, clear_database, load_files, load_txt_files,
+                   query_rag, split_conversations, split_document)
+
+logging.set_verbosity_error()
+
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
 @click.group()
@@ -24,6 +32,7 @@ def cli(ctx):
     "-c",
     "--clear",
     required=False,
+    is_flag=True,
     default=False,
     type=bool,
     help="clear db before loading docs",
@@ -42,6 +51,41 @@ def load_documents(ctx, path, clear):
     # Create (or update) the data store.
     documents = load_files(path)
     chunks = split_document(documents)
+    add_to_chroma(chunks)
+
+
+@cli.command(name="load_chats")
+@click.option(
+    "-p",
+    "--path",
+    required=False,
+    default="./data/",
+    type=str,
+    help="path to chat txt files",
+)
+@click.option(
+    "-c",
+    "--clear",
+    required=False,
+    is_flag=True,
+    default=False,
+    type=bool,
+    help="clear db before loading docs",
+)
+@click.pass_context
+def load_chats(ctx, path, clear):
+    """
+    Function to populate vectorial DB.
+    """
+    # Check if the database should be cleared (using the --clear flag).
+
+    if clear:
+        print("✨ Clearing Database")
+        clear_database()
+
+    # Create (or update) the data store.
+    convs = load_txt_files(path)
+    chunks = split_conversations(convs)
     add_to_chroma(chunks)
 
 
@@ -66,10 +110,45 @@ def clear_db(ctx):
     type=str,
     help="question to be answered by rag",
 )
+@click.option(
+    "-s",
+    "--source",
+    required=False,
+    is_flag=True,
+    default=False,
+    type=bool,
+    help="Get answer sources",
+)
+@click.option(
+    "-i",
+    "--is_conv",
+    required=False,
+    is_flag=True,
+    default=False,
+    type=bool,
+    help="Get answer sources",
+)
 @click.pass_context
-def run_query(ctx, query):
+def run_query(ctx, query, source, is_conv):
     """
     Answer the question base on the db's context
     """
-    ans = query_rag(query)
+
+    if is_conv:
+        template = """Responde la pregunta solamente basado en las siguientes conversaciones:
+        {context}
+        Pregunta: {question}
+        """
+    else:
+        template = """Answer the question based only on the following context:
+            {context}
+            Question: {question}
+            """
+
+    chunk_ids, ans = query_rag(query, prompt_template=template)
     print(ans)
+
+    if source:
+        print("Extracted from the following excerpts")
+        for c_id in chunk_ids:
+            print(c_id)
