@@ -181,7 +181,7 @@ def clear_database():
         shutil.rmtree(CHROMA_PATH)
 
 
-def query_rag(query: str, prompt_template: str, model_name: str='phi3'):
+def query_rag(query: str, prompt_template: str, model_name: str = "phi3"):
     """Builds the chain and runs the question through the rag model"""
     retriever = get_retriever_db()
 

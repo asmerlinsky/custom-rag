@@ -39,8 +39,8 @@ def cli():
 def load_documents(path, clear):
     """
     Function to populate vectorial DB.
+    Use the --clear to clear dabatabase prior to loading
     """
-    # Check if the database should be cleared (using the --clear flag).
 
     if clear:
         print("✨ Clearing Database")
@@ -72,7 +72,7 @@ def load_documents(path, clear):
 )
 def load_chats(path, clear):
     """
-    Function to populate vectorial DB.
+    Function to populate vectorial DB with chat excerpts using a specific regexp function to handle them
     """
     # Check if the database should be cleared (using the --clear flag).
 
