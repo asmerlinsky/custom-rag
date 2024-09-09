@@ -14,8 +14,7 @@ warnings.filterwarnings("ignore")
 
 
 @click.group()
-@click.pass_context
-def cli(ctx):
+def cli():
     pass
 
 
@@ -37,8 +36,7 @@ def cli(ctx):
     type=bool,
     help="clear db before loading docs",
 )
-@click.pass_context
-def load_documents(ctx, path, clear):
+def load_documents(path, clear):
     """
     Function to populate vectorial DB.
     """
@@ -72,8 +70,7 @@ def load_documents(ctx, path, clear):
     type=bool,
     help="clear db before loading docs",
 )
-@click.pass_context
-def load_chats(ctx, path, clear):
+def load_chats(path, clear):
     """
     Function to populate vectorial DB.
     """
@@ -90,8 +87,7 @@ def load_chats(ctx, path, clear):
 
 
 @cli.command(name="clear_database")
-@click.pass_context
-def clear_db(ctx):
+def clear_db():
     """
     Clears DB
     """
@@ -103,13 +99,7 @@ def clear_db(ctx):
 
 
 @cli.command(name="ask")
-@click.option(
-    "-q",
-    "--query",
-    required=True,
-    type=str,
-    help="question to be answered by rag",
-)
+@click.argument("query")
 @click.option(
     "-s",
     "--source",
@@ -128,8 +118,15 @@ def clear_db(ctx):
     type=bool,
     help="Get answer sources",
 )
-@click.pass_context
-def run_query(ctx, query, source, is_conv):
+@click.option(
+    "-m",
+    "--model",
+    required=False,
+    default="phi3",
+    type=str,
+    help="Choose one of locally available ollama models",
+)
+def run_query(query, source, is_conv, model):
     """
     Answer the question base on the db's context
     """
@@ -145,7 +142,7 @@ def run_query(ctx, query, source, is_conv):
             Question: {question}
             """
 
-    chunk_ids, ans = query_rag(query, prompt_template=template)
+    chunk_ids, ans = query_rag(query, prompt_template=template, model_name=model)
     print(ans)
 
     if source:

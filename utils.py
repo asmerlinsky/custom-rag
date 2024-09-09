@@ -181,15 +181,15 @@ def clear_database():
         shutil.rmtree(CHROMA_PATH)
 
 
-def query_rag(query: str, prompt_template: str):
+def query_rag(query: str, prompt_template: str, model_name: str='phi3'):
     """Builds the chain and runs the question through the rag model"""
     retriever = get_retriever_db()
 
     prompt = ChatPromptTemplate.from_template(prompt_template)
 
-    model = Ollama(model="phi3")
+    model = Ollama(model=model_name)
 
-    join_docs = lambda x: "\n".join([doc.page_content for doc in x.get("retriever")])
+    join_docs = lambda x: "\n\n".join([doc.page_content for doc in x.get("retriever")])
     get_ids = lambda x: [doc.metadata["id"] for doc in x.get("retriever")]
 
     rag_chain = (
