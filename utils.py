@@ -4,8 +4,8 @@ import glob
 import os
 import re
 import shutil
+from typing import List
 
-from dateutil.parser import parse
 from langchain.schema.document import Document
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFDirectoryLoader
@@ -32,6 +32,13 @@ def get_embedding_function():
     return embeddings
 
 
+def get_model(model_name: str):
+    return Ollama(
+        model=model_name,
+        num_gpu=1,
+    )
+
+
 def get_db():
     """Retrieves the vector db"""
     db = Chroma(
@@ -41,8 +48,8 @@ def get_db():
     return db
 
 
-def get_retriever_db():
-    return get_db().as_retriever(search_kwargs={"k": 40})
+def get_retriever_db(num_docs: int):
+    return get_db().as_retriever(search_kwargs={"k": num_docs})
 
 
 def load_files(data_path):
@@ -181,26 +188,50 @@ def clear_database():
         shutil.rmtree(CHROMA_PATH)
 
 
-def query_rag(query: str, prompt_template: str, model_name: str = "phi3"):
-    """Builds the chain and runs the question through the rag model"""
-    retriever = get_retriever_db()
+def join_retrieved_docs(doc_list: List):
+    return "\n\n".join([doc.page_content for doc in doc_list.get("retriever")])
+
+
+def get_ids_from_docs(doc_list: List):
+    return [doc.metadata["id"] for doc in doc_list.get("retriever")]
+
+
+def get_chain(
+    prompt_template: str,
+    model_name: str = "phi3",
+    get_sources=False,
+    num_docs: int = 40,
+):
+    """Builds the chain w/a specific template"""
+    retriever = get_retriever_db(num_docs=num_docs)
 
     prompt = ChatPromptTemplate.from_template(prompt_template)
 
-    model = Ollama(model=model_name)
-
-    join_docs = lambda x: "\n\n".join([doc.page_content for doc in x.get("retriever")])
-    get_ids = lambda x: [doc.metadata["id"] for doc in x.get("retriever")]
+    model = get_model(model_name)
 
     rag_chain = (
-        {"context": join_docs, "question": RunnablePick("question")}
+        {"context": join_retrieved_docs, "question": RunnablePick("question")}
         | prompt
         | model
         | StrOutputParser()
     )
+
+    if get_sources:
+        last_chain_segment = RunnableParallel(
+            {"chunk_ids": get_ids_from_docs, "output": rag_chain}
+        )
+    else:
+        last_chain_segment = rag_chain
+
     chain = {
         "retriever": retriever,
         "question": RunnablePassthrough(),
-    } | RunnableParallel({"chunk_ids": get_ids, "output": rag_chain})
+    } | last_chain_segment
 
+    return chain
+
+
+def query_rag(query: str, prompt_template: str, model_name: str = "phi3"):
+    """Runs the question through the rag model"""
+    chain = get_chain(prompt_template, model_name, get_sources=True)
     return chain.invoke(query).values()

@@ -13,9 +13,14 @@
    ```
 - Place documents in `./data` dir and add to database
    ```sh
-   poetry run python main.py load_documents
+   poetry run python cli.py load_documents
    ```
 - Ask questions
    ```sh
-    poetry run python main.py ask "what can you tell me about something?"
+    poetry run python cli.py "what can you tell me about something?"
+   ```
+
+- Start a server
+   ```sh
+    poetry run python cli.py start_server
    ```

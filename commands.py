@@ -1,10 +1,13 @@
 """ Commands for rag cli"""
 
 import click
+from fastapi import FastAPI
+from langserve import add_routes
 from transformers.utils import logging
 
-from utils import (add_to_chroma, clear_database, load_files, load_txt_files,
-                   query_rag, split_conversations, split_document)
+from utils import (add_to_chroma, clear_database, get_chain, load_files,
+                   load_txt_files, query_rag, split_conversations,
+                   split_document)
 
 logging.set_verbosity_error()
 
@@ -128,7 +131,7 @@ def clear_db():
 )
 def run_query(query, source, is_conv, model):
     """
-    Answer the question base on the db's context
+    Answer the question based on the db's context
     """
 
     if is_conv:
@@ -149,3 +152,64 @@ def run_query(query, source, is_conv, model):
         print("Extracted from the following excerpts")
         for c_id in chunk_ids:
             print(c_id)
+
+
+@cli.command(name="start_server")
+# @click.option(
+#     "-s",
+#     "--source",
+#     required=False,
+#     is_flag=True,
+#     default=False,
+#     type=bool,
+#     help="Get answer sources",
+# )
+@click.option(
+    "-i",
+    "--is_conv",
+    required=False,
+    is_flag=True,
+    default=False,
+    type=bool,
+    help="Get answer sources",
+)
+@click.option(
+    "-m",
+    "--model",
+    required=False,
+    default="phi3",
+    type=str,
+    help="Choose one of locally available ollama models",
+)
+@click.option(
+    "-d",
+    "--num_docs",
+    required=False,
+    default=40,
+    type=int,
+    help="How many docs to retrieve from the db",
+)
+def start_server(is_conv, model, num_docs):
+    """
+    Answer the question based on the db's context
+    """
+
+    if is_conv:
+        template = """Responde la pregunta solamente basado en las siguientes conversaciones:
+        {context}
+        Pregunta: {question}
+        """
+    else:
+        template = """Answer the question based only on the following context:
+            {context}
+            Question: {question}
+            """
+
+    chain = get_chain(template, model, num_docs)
+
+    app = FastAPI(title="Rag in server mode")
+    add_routes(app, chain)
+
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8001)
